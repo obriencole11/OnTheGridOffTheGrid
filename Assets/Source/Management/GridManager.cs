@@ -53,4 +53,14 @@ public class GridManager {
         return Grid.ContainsKey(square);
     }
 
+    // This makes every tile empty
+    public void emptyGrid()
+    {
+        foreach (Tile tile in Grid.Values)
+        {
+            tile.contents = null;
+            tile.filled = false;
+        }
+    }
+
 }

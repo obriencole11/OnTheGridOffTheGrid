@@ -4,98 +4,132 @@ using UnityEngine;
 
 public class GridObject : MonoBehaviour {
 
-    // The 2D position on the grid
-    public Vector2 gridPosition { get; private set; }
-
-    // The next position to move to
-    public Direction nextDirection { get; private set; }
-
-    public bool canKill = true;
-
-    // Whether the object is active or not
-    private bool _destroyed = false;
-    public bool destroyed
+    // The current state of the GridObject, so whether it exists, its gridPosition, and its direction
+    private GridState _state;
+    public GridState state
     {
         get
         {
-            return _destroyed;
+            return _state;
         }
-        set
+        protected set
         {
-            _destroyed = value;
-
-            // Disable all child meshes
-            Renderer mesh = GetComponentInChildren<Renderer>();
-            mesh.enabled = !destroyed;
-
-            // Change the tile state
-            if (destroyed)
-            {
-                GameManager.Instance.gridManager.updateTile(gridPosition, false);
-                GameManager.Instance.removeGridObject(this);
-            }
-            else
-            {
-                GameManager.Instance.gridManager.updateTile(gridPosition, true, this);
-                GameManager.Instance.addGridObject(this);
-            }
+            _state = value;
         }
     }
 
-    // The relative turn this object will move during
-    [HideInInspector]
-    public int turnNumber = 0;
+    private GridState _nextState;
+    public GridState nextState
+    {
+        get
+        {
+            return _nextState;
+        }
+        protected set
+        {
+            _nextState = value;
+        }
+    }
 
-    // An event called when the character is moved
-    public delegate void OnNewPosition();
-    public OnNewPosition onNewPosition;
+    public ColorType color = ColorType.NONE;
+    
+    public int powerLevel { get; protected set; }
 
     public void Awake()
     {
-        // Register this grid object
-        GameManager.Instance.addGridObject(this);
+
+        // Register this grid object with the game manager
+        register();
+
+        // Apply the state
+        applyState(state);
+
+        // Set the color
+        setColor(color);
     }
 
     public void Start()
     {
+        powerLevel = 1;
+    }
+
+
+    #region Public Methods
+
+    public void move(Vector2 gridPosition)
+    {
+        nextState.gridPosition = gridPosition;
+    }
+
+    public virtual void turn(Direction direction)
+    {
+        nextState.direction = direction;
+    }
+
+    public virtual void animate(Vector2 nextPosition, float blend)
+    {
+        Vector2 blendedPosition = Vector2.Lerp(state.gridPosition, nextPosition, blend);
+        transform.position = GridTools.gridPositionToWorld(blendedPosition);
+    }
+
+    public virtual void declareAction()
+    {
+        // The default declaration is to not move at all
+        nextState = state;
+    }
+
+    public void setColor(ColorType newColor)
+    {
+        color = newColor;
+
+        if (color == ColorType.WHITE)
+        {
+            gameObject.GetComponentInChildren<Renderer>().material = GameManager.Instance.settings.whiteMaterial;
+        }
+        else if (color == ColorType.BLACK)
+        {
+            gameObject.GetComponentInChildren<Renderer>().material = GameManager.Instance.settings.blackMaterial;
+        }
+    }
+
+    public void applyState(GridState newState)
+    {
+        // This actually update the position, rotation and visibilty based on the current state
+
+        state = newState;
+        nextState = new GridState(state.exists, state.gridPosition, state.direction);
+
+        // Update the visibility
+        Renderer mesh = GetComponentInChildren<Renderer>();
+        mesh.enabled = state.exists;
+
+        // Update the position
+        transform.position = GridTools.gridPositionToWorld(state.gridPosition);
+
+        //Update the orientation
+        transform.rotation = GridTools.DirectionToQuaternion(state.direction);
         
 
-        GameManager.Instance.onEnterGrid += AddObject;
     }
 
-    public void AddObject()
+    #endregion
+
+
+    #region Private Methods
+
+    protected virtual void register()
     {
-        gridPosition = GridTools.worldPositionToGrid(transform.position);
-        setPosition(gridPosition);
-        GameManager.Instance.gridManager.updateTile(gridPosition, true, this);
+        // Calculate the gridPosition and direction
+        Vector2 gridPosition = GridTools.worldPositionToGrid(transform.position);
+        var localDirection = transform.InverseTransformDirection(Vector3.forward);
+        localDirection.x *= -1;
+        Direction currentDirection = GridTools.VectorToDirection(localDirection);
+
+        state = new GridState(true, gridPosition, currentDirection);
+
+        GameManager.Instance.registerObject(this);
     }
 
-    // Blend the position of the object, this is for animating the object rather than actually moving it in grid space
-    public void blendPosition(float blend, Vector2 position)
-    {
-        Vector2 newPosition = new Vector2(Mathf.Lerp(gridPosition.x, position.x, blend), Mathf.Lerp(gridPosition.y, position.y, blend));
-        transform.position = GridTools.gridPositionToWorld(newPosition);
-    }
-
-    // Set the new grid position and move the transform to it
-    public void setPosition(Vector2 newPosition)
-    {
-        gridPosition = newPosition;
-        transform.position = GridTools.gridPositionToWorld(newPosition);
-
-        if (onNewPosition != null) onNewPosition();
-    }
-
-    // Declare the next position for this object
-    public void setNextDirection(Direction direction)
-    {
-        nextDirection = direction;
-    }
-
-    public void destroy()
-    {
-        gameObject.SetActive(false);
-    }
-
+    #endregion
 
 }

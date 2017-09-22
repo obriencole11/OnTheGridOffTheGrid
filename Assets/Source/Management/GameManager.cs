@@ -8,282 +8,496 @@ public class GameManager : Singleton<GameManager> {
     // The Settings Asset to use
     public GameSettings settings;
 
-    // A list of every grid object that is active
+    // A list of every non-player grid object that is active
     private List<GridObject> gridObjects = new List<GridObject>();
+    private GridObject player;
+
+    // The history
+    private List<IDictionary<GridObject, GridState>> stateHistory = new List<IDictionary<GridObject, GridState>>();
+
+    // The player object
+    private PlayerObject playerObject;
 
     // A grid manager class to manage tile state
-    public GridManager gridManager = new GridManager();
+    private GridManager _grid = new GridManager();
+    public GridManager grid
+    {
+        get
+        {
+            return _grid;
+        }
+        private set
+        {
+            _grid = value;
+        }
+    }
+
+    private IDictionary<GridObject, Vector2> currentActions;
 
     // A bool to determine whether input should be received
-    public bool gameActive = true;
+    public bool roundActive = false;
 
-    // A bool to determine whether the player is on the grid or not
-    public bool onGrid = false;
-
-    // A timer to count seconds between turns
     private float turnTimer = 0.0f;
 
-    // The current turn number
-    private int turnNumber = 0;
+    private bool playerTurn = false;
 
-    // Event when the grid is entered
-    public delegate void OnEnterGrid();
-    public OnEnterGrid onEnterGrid;
-
-    // Event when the grid is exited
-    public delegate void OnExitGrid();
-    public OnExitGrid onExitGrid;
-
-    // Action Dictionaries
-    private IDictionary<GridObject, Vector2> movementActions = new Dictionary<GridObject, Vector2>();
-    private IDictionary<GridObject, Vector2> collisionActions = new Dictionary<GridObject, Vector2>();
-
-    // Adds a new grid object
-    public void addGridObject(GridObject obj)
+    public void Awake()
     {
-        gridObjects.Add(obj);
-    }
-
-    // Removes an existing grid object
-    public void removeGridObject(GridObject obj)
-    {
-        gridObjects.Remove(obj);
-    }
-
-    // Begins a complete round of turns
-    public void advanceTurn()
-    {
-        // Reset tracking variables
-        gameActive = false;
-        turnTimer = 0.0f;
-        turnNumber = 0;
-        generateActions();
-    }
-
-    public void generateActions()
-    {
-
-        // Clear the current action dictionaries
-        movementActions.Clear();
-        collisionActions.Clear();
-
-        // Generate a list of currentGridObjects and a list of idle Grid Objects
-        List<GridObject> currentObjects = new List<GridObject>();
-        List<GridObject> idleObjects = new List<GridObject>();
-
-        foreach (GridObject gridObject in gridObjects)
-        {
-            if (gridObject.turnNumber == turnNumber)
-            {
-                currentObjects.Add(gridObject);
-            } else {
-                idleObjects.Add(gridObject);
-            }
-        }
-
-        // Now iterate throught the current objects, and determine their action for the turn
-        foreach (GridObject gridObject in currentObjects)
-        {
-
-            // Calculate the next position for the object
-            Vector2 nextPosition = GridTools.directionPosition(gridObject, gridObject.nextDirection);
-
-            if (gridManager.exists(nextPosition))
-            {
-                // Check if the destination is filled
-                if (gridManager.isFilled(nextPosition))
-                {
-                    // If so check if the filler is a current Object
-                    GridObject fillObject = gridManager.getGridContents(nextPosition);
-
-                    if (currentObjects.Contains(fillObject))
-                    {
-                        // If so, check if its gonna collide with the gridObject
-                        Vector2 fillObjectPosition = GridTools.directionPosition(fillObject, fillObject.nextDirection);
-
-                        if (gridObject.gridPosition == fillObjectPosition)
-                        {
-                            // If it is, add the gridObject to the collide group
-                            collisionActions.Add(gridObject, nextPosition);
-                        }
-                        else
-                        {
-                            // Otherwise, check if it can move
-                            if (!gridManager.exists(fillObjectPosition)) {
-
-                                // If it can't move, try to push it
-                                Vector2 fillObjectNextPosition = GridTools.directionPosition(fillObject, gridObject.nextDirection);
-
-                                if (gridManager.isFilled(fillObjectNextPosition) || !gridManager.exists(fillObjectNextPosition))
-                                {
-
-                                    // If so add it to the collision actions
-                                    collisionActions.Add(gridObject, nextPosition);
-                                }
-                                else
-                                {
-                                    // Otherwise, push the object
-                                    movementActions.Add(gridObject, nextPosition);
-                                    movementActions.Add(fillObject, fillObjectNextPosition);
-                                }
-
-                            }
-                            else
-                            {
-                                // Otherwise add it to the movement group
-                                movementActions.Add(gridObject, nextPosition);
-                            }
-                        }
-
-                    }
-                    else {
-
-                        // If not, see if the fillObject is pushable
-                        Vector2 fillObjectNextPosition = GridTools.directionPosition(fillObject, gridObject.nextDirection);
-
-                        if (gridManager.isFilled(fillObjectNextPosition) || !gridManager.exists(fillObjectNextPosition))
-                        {
-                            if (gridObject.canKill)
-                            {
-                                fillObject.destroyed = true;
-                            }
-
-                            // If so add it to the collision actions
-                            collisionActions.Add(gridObject, nextPosition);
-                        }
-                        else
-                        {
-                            // Otherwise, push the object
-                            movementActions.Add(gridObject, nextPosition);
-                            movementActions.Add(fillObject, fillObjectNextPosition);
-                        }
-
-                    }
-
-                }
-                else
-                {
-                    // If not check if its a destination of another current object
-                    bool isShared = false;
-
-                    foreach (GridObject otherObject in currentObjects)
-                    {
-                        Vector2 otherNextPosition = GridTools.directionPosition(otherObject, otherObject.nextDirection);
-
-                        if (gridObject != otherObject && nextPosition == otherNextPosition)
-                        {
-                            isShared = true;
-                            break;
-                        }
-                    }
-
-                    if (isShared)
-                    {
-                        // If it is add it to the collision group
-                        collisionActions.Add(gridObject, nextPosition);
-                    }
-                    else
-                    {
-                        // Otherwise add it to the movement group
-                        movementActions.Add(gridObject, nextPosition);
-                    }
-                }
-            }
-            
-
-        }
+        //During this the gridobject list is populated and the grid tiles are added
     }
 
     public void Start()
     {
+        createNewStateList();
+        RefreshGrid();
     }
 
     public void Update()
     {
 
-        // BUTTON EVENTS
-        if (Input.GetKeyDown("r")){
-            SceneManager.LoadScene(SceneManager.GetActiveScene().name);
-            gridObjects = new List<GridObject>();
-            gridManager = new GridManager();
-            gameActive = true;
-            turnTimer = 0.0f;
-            turnNumber = 0;
+        if (roundActive)
+        {
+            turnTimer -= Time.deltaTime / settings.turnDuration;
+
+            if (turnTimer > 0.0f)
+            {
+                updateObjects();
+            } else {
+                endTurn();
+            }
+        } else
+        {
+            if (Input.GetKeyDown("z"))
+            {
+                undo();
+            } else if (Input.GetKeyDown("r"))
+            {
+                reset();
+            }
+        }
+    }
+
+    // Begins a complete round of turns
+    public void advanceTurn()
+    {
+        startRound();
+    }
+
+    private void startRound()
+    {
+        createNewStateList();
+        roundActive = true;
+        startNewTurn();
+    }
+
+    private void startNewTurn()
+    {
+        // Reset per round variables
+        playerTurn = !playerTurn;
+        turnTimer = 1.0f;
+        currentActions = new Dictionary<GridObject, Vector2>();
+
+        // Have every gridObject declare their next action
+        if (playerTurn)
+        {
+            // Add the player to this list
+            playerObject.declareAction();
+            currentActions.Add(playerObject, playerObject.nextState.gridPosition);
+
+            // Add any objects the player is pushing
+            if (SquareFilled(playerObject.nextState.gridPosition))
+            {
+                push(GridContents(playerObject.nextState.gridPosition), playerObject.nextState.direction);
+            }
+
+        } else
+        {
+            foreach (GridObject gridObject in gridObjects)
+            {
+                if (gridObject.state.exists)
+                {
+                    gridObject.declareAction();
+
+                    if (gridObject.nextState.gridPosition != gridObject.state.gridPosition)
+                    {
+                        currentActions.Add(gridObject, gridObject.nextState.gridPosition);
+                    }
+                }
+
+            }
         }
 
-        // TURN UPDATE
-        // If the game is not active, begin the turn sequence
-        if (!gameActive)
+    }
+
+    // This updates the position of all objects whos turn it is
+    private void updateObjects()
+    {
+        foreach (GridObject gridObject in currentActions.Keys)
         {
-            // Set the timer
-            turnTimer += Time.deltaTime / settings.turnDuration;
+            gridObject.animate(currentActions[gridObject], settings.basicMovement.Evaluate(1- turnTimer));
+        }
+    }
 
-            // If the timer has not finished...
-            if (turnTimer < 1.0)
+    private void endTurn()
+    {
+        IDictionary<Vector2, ColorType> upgradeList = new Dictionary<Vector2, ColorType>();
+        foreach (GridObject gridObject in currentActions.Keys)
+        {
+
+            Vector2 nextPosition = currentActions[gridObject];
+
+            bool moving = false;
+            bool colliding = false;
+            bool destroy = false;
+            bool upgrade = false;
+
+            if (gridObject != playerObject)
             {
-                // Blend the positions for each action
-
-                foreach (GridObject gridObject in movementActions.Keys)
+                // Check if the next space is filled
+                if (SquareFilled(nextPosition) && GridContents(nextPosition) != gridObject)
                 {
-                    float blend = settings.basicMovement.Evaluate(turnTimer);
-                    gridObject.blendPosition(blend, movementActions[gridObject]);
-                }
+                    GridObject fillObject = GridContents(nextPosition);
 
-                foreach (GridObject gridObject in collisionActions.Keys)
+                    // Check if the object is moving
+                    if (currentActions.Keys.Contains(fillObject))
+                    {
+                        if (currentActions[fillObject] != fillObject.state.gridPosition)
+                        {
+                            moving = true;
+                        }
+                    }
+
+                    // if it is, check if its moving towards this gridObject
+                    if (moving)
+                    {
+                        if (gridObject.state.gridPosition == currentActions[fillObject])
+                        {
+                            colliding = true;
+                        }
+                    }
+                    else
+                    {
+                        colliding = true;
+                    }
+
+                    // If it is colliding, check what happens
+                    if (colliding)
+                    {
+                        if (fillObject.color == gridObject.color && fillObject.powerLevel == gridObject.powerLevel)
+                        {
+                            destroy = true;
+                            upgrade = true;
+                        }
+                        else
+                        {
+                            if (fillObject.powerLevel >= gridObject.powerLevel)
+                            {
+                                destroy = true;
+                            }
+                        }
+                    }
+                } else {
+                    foreach (GridObject otherObject in currentActions.Keys)
+                    {
+                        if (otherObject != gridObject)
+                        {
+                            if (nextPosition == currentActions[otherObject])
+                            {
+                                colliding = true;
+                            }
+
+                            if (colliding)
+                            {
+                                if (otherObject.color == gridObject.color && otherObject.powerLevel == gridObject.powerLevel)
+                                {
+                                    destroy = true;
+                                    upgrade = true;
+                                }
+                                else
+                                {
+                                    if (otherObject.powerLevel >= gridObject.powerLevel)
+                                    {
+                                        destroy = true;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            GridState newState = new GridState(!destroy, nextPosition, gridObject.nextState.direction);
+            gridObject.applyState(newState);
+
+            if (upgrade)
+            {
+                if (!upgradeList.ContainsKey(nextPosition))
                 {
-                    float blend = settings.collision.Evaluate(turnTimer);
-                    gridObject.blendPosition(blend, collisionActions[gridObject]);
+                    upgradeList.Add(nextPosition, gridObject.color);
                 }
+            }
+        }
 
+        foreach (Vector2 square in upgradeList.Keys)
+        {
+            createRook(square, upgradeList[square]);
+        }
+
+        RefreshGrid();
+
+        if (playerTurn)
+        {
+            // End the turn
+            startNewTurn();
+        } else
+        {
+            endRound();
+        }
+    }
+
+    private void endRound()
+    {
+        roundActive = false;
+        turnTimer = 0.0f;
+        playerTurn = false;
+    }
+
+    private bool CanKill(GridObject object1, GridObject object2)
+    {
+        return object1.powerLevel >= object2.powerLevel;
+    }
+
+    private bool CanBePushed(GridObject gridObject, Direction direction)
+    {
+        Vector2 nextSquare = GridTools.directionPosition(gridObject.state.gridPosition, direction);
+
+        if (SquareExists(nextSquare))
+        {
+            if (SquareFilled(nextSquare))
+            {
+                if (gridObject.color == GridContents(nextSquare).color && gridObject.powerLevel != GridContents(nextSquare).powerLevel)
+                {
+
+                    // If they're the same color, check if they can be pushed
+                    return CanBePushed(GridContents(nextSquare), direction);
+                }
+                else
+                {
+                    // Otherwise someone is dying here
+                    return true;
+                }
             }
             else
             {
-
-                // Set the final position for each grid object whos turn it is
-                // Additionally, update the gridmanager on the filled status
-                foreach (GridObject gridObject in movementActions.Keys)
-                {
-                    gridManager.updateTile(gridObject.gridPosition, false);
-                    
-                }
-
-                foreach (GridObject gridObject in movementActions.Keys)
-                {
-                    gridManager.updateTile(movementActions[gridObject], true, gridObject);
-                    gridObject.setPosition(movementActions[gridObject]);
-                }
-
-                foreach (GridObject gridObject in collisionActions.Keys)
-                {
-                    gridObject.setPosition(gridObject.gridPosition);
-                }
-
-                turnNumber++;
-                turnTimer = 0.0f;
-
-                if (turnNumber == settings.turnCount)
-                {
-                    gameActive = true;
-                }
-
-
-                generateActions();
-
+                return true;
             }
-            
+        } else
+        {
+            return false;
         }
-    }
-
-    public void EnterGrid()
-    {
-        onGrid = true;
-        onEnterGrid();
         
     }
 
-    public void ExitGrid()
+    private void push(GridObject gridObject, Direction direction)
     {
-        onGrid = false;
-        onExitGrid();
+        Vector2 nextPosition = GridTools.directionPosition(gridObject.state.gridPosition, direction);
+
+        currentActions.Add(gridObject, nextPosition);
+
+        if (SquareFilled(nextPosition))
+        {
+            if (gridObject.color == GridContents(nextPosition).color && gridObject.powerLevel != GridContents(nextPosition).powerLevel)
+            {
+                push(GridContents(nextPosition), direction);
+            } else
+            {
+                currentActions.Add(GridContents(nextPosition), nextPosition);
+            }
+        }
     }
-}   
+
+    private void createRook(Vector2 square, ColorType color)
+    {
+        GameObject rook = Instantiate(settings.rookPrefab, GridTools.gridPositionToWorld(square), Quaternion.identity);
+        rook.GetComponent<RookObject>().setColor(color);
+    }
+
+    #region GridObject commands
+
+    // Adds a new grid object
+    public void registerObject(GridObject obj)
+    {
+        gridObjects.Add(obj);
+    }
+
+    // Adds the object representing the player
+    public void registerPlayer(PlayerObject obj)
+    {
+        playerObject = obj;
+    }
+
+    #endregion
+
+
+    #region History commands
+
+    // Returns the latest history list
+    private IDictionary<GridObject, GridState> currentHistoryList
+    {
+        get
+        {
+            return stateHistory[stateHistory.Count - 1];
+        }
+    }
+
+    private void undo()
+    {
+        if (stateHistory.Count > 0)
+        {
+
+            //Iterate through the stateHistory and set their corresponding gridobjects state
+            foreach (GridObject gridObject in gridObjects)
+            {
+                if (currentHistoryList.ContainsKey(gridObject))
+                {
+                    gridObject.applyState(currentHistoryList[gridObject]);
+                } else
+                {
+                    gridObject.state.exists = false;
+                    gridObject.applyState(gridObject.state);
+                }
+            }
+            playerObject.applyState(currentHistoryList[playerObject]);
+
+            RefreshGrid();
+
+            //Remove the latest history entry
+            stateHistory.RemoveAt(stateHistory.Count - 1);
+        }
+        
+
+    }
+
+    private void reset()
+    {
+        createNewStateList();
+        IDictionary<GridObject, GridState> firstHistoryList = stateHistory[0];
+        foreach (GridObject gridObject in gridObjects)
+        {
+            if (firstHistoryList.ContainsKey(gridObject))
+            {
+                gridObject.applyState(firstHistoryList[gridObject]);
+            }
+            else
+            {
+                gridObject.state.exists = false;
+                gridObject.applyState(gridObject.state);
+            }
+        }
+        playerObject.applyState(firstHistoryList[playerObject]);
+
+        RefreshGrid();
+
+        createNewStateList();
+    }
+
+    private void createNewStateList()
+    {
+        //Add a new list
+        IDictionary<GridObject, GridState> newStateList = new Dictionary<GridObject, GridState>();
+
+        // For every gridobject in the scene, add their current state to the list
+        foreach (GridObject gridObject in gridObjects)
+        {
+            newStateList.Add(gridObject, gridObject.state);
+        }
+        newStateList.Add(playerObject, playerObject.state);
+
+        // Add the list to the history list
+        stateHistory.Add(newStateList);
+    }
+
+    #endregion
+
+
+    #region Grid commands
+
+    public void AddTile(Vector2 square)
+    {
+        grid.addTile(square);
+    }
+
+    public bool SquareExists(Vector2 square)
+    {
+        return grid.exists(square);
+    }
+
+    public bool SquareFilled(Vector2 square)
+    {
+        return grid.isFilled(square);
+    }
+
+    private void RefreshGrid()
+    {
+        // Empty the grid
+        grid.emptyGrid();
+
+        // Fill the grid with each gridObject
+        foreach (GridObject gridObject in gridObjects)
+        {
+            if (gridObject.state.exists)
+            {
+                grid.updateTile(gridObject.state.gridPosition, true, gridObject);
+            }
+        }
+
+        // Add the player to the grid
+        grid.updateTile(playerObject.state.gridPosition, true, playerObject);
+    }
+
+    public GridObject GridContents(Vector2 square)
+    {
+        return grid.getGridContents(square);
+    }
+
+    public bool CouldPlayerMoveHere(Vector2 square, Direction direction)
+    {
+        if (!SquareExists(square))
+        {
+            return false;
+        }
+
+        if (SquareFilled(square))
+        {
+            return CanBePushed(GridContents(square), direction);
+        } else
+        {
+            return true;
+        }
+    }
+
+    public bool CouldObjectMoveHere(Vector2 square, GridObject gridObject)
+    {
+        if (!SquareExists(square))
+        {
+            return false;
+        }
+
+        if (SquareFilled(square))
+        {
+            if (GridContents(square).color == gridObject.color || GridContents(square) == playerObject)
+            {
+                return false;
+            } else
+            {
+                return true;
+            }
+        } else
+        {
+            return true;
+        }
+    }
+
+    #endregion
+
+}

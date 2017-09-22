@@ -14,7 +14,7 @@ public class GridTile : MonoBehaviour {
 
 	// Use this for initialization
 	void Awake () {
-        GameManager.Instance.gridManager.addTile(gridPosition);
+        GameManager.Instance.AddTile(gridPosition);
 	}
 
 }

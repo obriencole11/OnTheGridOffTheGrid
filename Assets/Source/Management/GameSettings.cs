@@ -15,4 +15,9 @@ public class GameSettings : ScriptableObject
 
     [Header("Movement")]
     public float offGridSpeed = 50.0f;
+
+    [Header("Character")]
+    public Material blackMaterial;
+    public Material whiteMaterial;
+    public GameObject rookPrefab;
 }
