@@ -138,30 +138,41 @@ public class GameManager : Singleton<GameManager> {
         }
     }
 
+    
     private void endTurn()
     {
+        // Create a dictionary to hold all to be created rooks
         IDictionary<Vector2, ColorType> upgradeList = new Dictionary<Vector2, ColorType>();
+
+        // Create a dictionary to hold the final actions of every current gridObject
+        IDictionary<GridObject, GridState> nextActions = new Dictionary<GridObject, GridState>();
+        
         foreach (GridObject gridObject in currentActions.Keys)
         {
-
+            
             Vector2 nextPosition = currentActions[gridObject];
 
             bool moving = false;
             bool colliding = false;
             bool destroy = false;
             bool upgrade = false;
+            
 
             if (gridObject != playerObject)
             {
+                
                 // Check if the next space is filled
                 if (SquareFilled(nextPosition) && GridContents(nextPosition) != gridObject)
                 {
                     GridObject fillObject = GridContents(nextPosition);
+                    print(fillObject.state.gridPosition);
+                    //print(fillObject.nextState.gridPosition);
+                    print(currentActions[fillObject]);
 
                     // Check if the object is moving
                     if (currentActions.Keys.Contains(fillObject))
                     {
-                        if (currentActions[fillObject] != fillObject.state.gridPosition)
+                        if (fillObject.nextState.gridPosition != fillObject.state.gridPosition)
                         {
                             moving = true;
                         }
@@ -201,6 +212,7 @@ public class GameManager : Singleton<GameManager> {
                     {
                         if (otherObject != gridObject)
                         {
+                            colliding = false;
                             if (nextPosition == currentActions[otherObject])
                             {
                                 colliding = true;
@@ -210,6 +222,8 @@ public class GameManager : Singleton<GameManager> {
                             {
                                 if (otherObject.color == gridObject.color && otherObject.powerLevel == gridObject.powerLevel)
                                 {
+
+                                    print(otherObject.color + " " + gridObject.color);
                                     destroy = true;
                                     upgrade = true;
                                 }
@@ -227,7 +241,7 @@ public class GameManager : Singleton<GameManager> {
             }
 
             GridState newState = new GridState(!destroy, nextPosition, gridObject.nextState.direction);
-            gridObject.applyState(newState);
+            nextActions.Add(gridObject, newState);
 
             if (upgrade)
             {
@@ -236,6 +250,10 @@ public class GameManager : Singleton<GameManager> {
                     upgradeList.Add(nextPosition, gridObject.color);
                 }
             }
+        }
+
+        foreach(GridObject gridObject in nextActions.Keys){
+            gridObject.applyState(nextActions[gridObject]);
         }
 
         foreach (Vector2 square in upgradeList.Keys)
