@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class GridObject : MonoBehaviour {
+public class GridObject : MonoBehaviour, ILevelObject {
 
     // The current state of the GridObject, so whether it exists, its gridPosition, and its direction
     private GridState _state;
@@ -31,28 +31,38 @@ public class GridObject : MonoBehaviour {
         }
     }
 
+    protected int gridID;
+
     public ColorType color = ColorType.NONE;
     
     public int powerLevel { get; protected set; }
 
     public void Awake()
     {
+        GameManager.Instance.onEnterGrid += enterGrid;
+    }
 
-        // Register this grid object with the game manager
-        register();
+    public virtual  void enterGrid(int id) {
 
-        // Apply the state
-        applyState(state);
+        if (id == gridID || gridID == null) {
+            // Register this grid object with the game manager
+            register();
 
-        // Set the color
-        setColor(color);
+            // Apply the state
+            applyState(state);
+
+            // Set the color
+            setColor(color);
+
+            // Disable the collider
+            gameObject.GetComponent<Collider>().enabled = false;
+        }
     }
 
     public void Start()
     {
         powerLevel = 1;
     }
-
 
     #region Public Methods
 
@@ -76,6 +86,10 @@ public class GridObject : MonoBehaviour {
     {
         // The default declaration is to not move at all
         nextState = state;
+    }
+
+    public void addToGrid(int id) {
+        gridID = id;
     }
 
     public void setColor(ColorType newColor)

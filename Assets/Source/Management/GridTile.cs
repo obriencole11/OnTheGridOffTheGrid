@@ -2,7 +2,9 @@
 using System.Collections.Generic;
 using UnityEngine;
 
-public class GridTile : MonoBehaviour {
+public class GridTile : MonoBehaviour, ILevelObject {
+
+    private int gridID;
 
     Vector2 gridPosition
     {
@@ -14,7 +16,18 @@ public class GridTile : MonoBehaviour {
 
 	// Use this for initialization
 	void Awake () {
-        GameManager.Instance.AddTile(gridPosition);
+        //GameManager.Instance.AddTile(gridPosition);
+        GameManager.Instance.onNewGrid += enterGrid;
 	}
+
+    public void addToGrid(int id) {
+        gridID = id;
+    }
+
+    void enterGrid(int id) {
+        if (gridID == null || id == gridID) {
+            GameManager.Instance.AddTile(gridPosition);
+        }
+    }
 
 }

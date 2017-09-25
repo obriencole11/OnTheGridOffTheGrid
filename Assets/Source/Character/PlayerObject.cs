@@ -11,6 +11,12 @@ public class PlayerObject : GridObject {
     {
         base.Awake();
         rb = gameObject.GetComponent<Rigidbody>();
+
+        GameManager.Instance.onExitGrid += exitGrid;
+
+        // Register this grid object with the game manager
+        register();
+
     }
 
     public void Update()
@@ -19,45 +25,52 @@ public class PlayerObject : GridObject {
         float h = Input.GetAxis("Horizontal") * GameManager.Instance.settings.offGridSpeed;
         float v = Input.GetAxis("Vertical") * GameManager.Instance.settings.offGridSpeed;
 
-        if (!GameManager.Instance.roundActive)
-        {
-            if (Input.GetKeyDown("right"))
+        if (GameManager.Instance.gridActive) {
+            if (!GameManager.Instance.roundActive)
             {
-                Vector2 square = GridTools.directionPosition(state.gridPosition, Direction.RIGHT);
-                if (GameManager.Instance.CouldPlayerMoveHere(square, Direction.RIGHT))
+                if (Input.GetKeyDown("right"))
                 {
-                    turn(Direction.RIGHT);
+                    Vector2 square = GridTools.directionPosition(state.gridPosition, Direction.RIGHT);
+                    if (GameManager.Instance.CouldPlayerMoveHere(square, Direction.RIGHT))
+                    {
+                        turn(Direction.RIGHT);
+                    }
+                }
+
+                if (Input.GetKeyDown("left"))
+                {
+                    Vector2 square = GridTools.directionPosition(state.gridPosition, Direction.LEFT);
+                    if (GameManager.Instance.CouldPlayerMoveHere(square, Direction.LEFT))
+                    {
+                        turn(Direction.LEFT);
+                    }
+                }
+
+                if (Input.GetKeyDown("up"))
+                {
+                    Vector2 square = GridTools.directionPosition(state.gridPosition, Direction.UP);
+                    if (GameManager.Instance.CouldPlayerMoveHere(square, Direction.UP))
+                    {
+                        turn(Direction.UP);
+                    }
+                }
+
+                if (Input.GetKeyDown("down"))
+                {
+                    Vector2 square = GridTools.directionPosition(state.gridPosition, Direction.DOWN);
+                    if (GameManager.Instance.CouldPlayerMoveHere(square, Direction.DOWN))
+                    {
+                        turn(Direction.DOWN);
+                    }
                 }
             }
-
-            if (Input.GetKeyDown("left"))
-            {
-                Vector2 square = GridTools.directionPosition(state.gridPosition, Direction.LEFT);
-                if (GameManager.Instance.CouldPlayerMoveHere(square, Direction.LEFT))
-                {
-                    turn(Direction.LEFT);
-                }
+        } else {
+                
+                // Otherwise if the grid is not active, accept smooth movemtent
+                // force = acceleration
+                // acceleration = desiredVelocity - currentVelocity
+                rb.AddForce(new Vector3 (h - rb.velocity.x, 0, v - rb.velocity.z), ForceMode.Impulse);
             }
-
-            if (Input.GetKeyDown("up"))
-            {
-                Vector2 square = GridTools.directionPosition(state.gridPosition, Direction.UP);
-                if (GameManager.Instance.CouldPlayerMoveHere(square, Direction.UP))
-                {
-                    turn(Direction.UP);
-                }
-            }
-
-            if (Input.GetKeyDown("down"))
-            {
-                Vector2 square = GridTools.directionPosition(state.gridPosition, Direction.DOWN);
-                if (GameManager.Instance.CouldPlayerMoveHere(square, Direction.DOWN))
-                {
-                    turn(Direction.DOWN);
-                }
-            }
-
-        }
     }
 
     public override void turn(Direction direction)
@@ -69,6 +82,17 @@ public class PlayerObject : GridObject {
     public override void declareAction()
     {
         nextState.gridPosition = GridTools.directionPosition(state.gridPosition, nextState.direction);
+    }
+
+    public override void enterGrid(int id) {
+        rb.velocity *= 0.0f;
+        register();
+        // Apply the state
+        applyState(state);
+    }
+
+    public void exitGrid(int id) {
+        gameObject.GetComponent<Collider>().enabled = true;
     }
 
     protected override void register()

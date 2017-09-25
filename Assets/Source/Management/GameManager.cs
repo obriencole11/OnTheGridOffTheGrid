@@ -10,13 +10,17 @@ public class GameManager : Singleton<GameManager> {
 
     // A list of every non-player grid object that is active
     private List<GridObject> gridObjects = new List<GridObject>();
-    private GridObject player;
 
     // The history
     private List<IDictionary<GridObject, GridState>> stateHistory = new List<IDictionary<GridObject, GridState>>();
 
     // The player object
     private PlayerObject playerObject;
+    public GameObject player {
+        get {
+            return playerObject.gameObject;
+        }
+    }
 
     // A grid manager class to manage tile state
     private GridManager _grid = new GridManager();
@@ -34,53 +38,123 @@ public class GameManager : Singleton<GameManager> {
 
     private IDictionary<GridObject, Vector2> currentActions;
 
-    // A bool to determine whether input should be received
-    public bool roundActive = false;
-
-    private float turnTimer = 0.0f;
-
-    private bool playerTurn = false;
-
-    public void Awake()
-    {
-        //During this the gridobject list is populated and the grid tiles are added
+    private bool _gridActive;
+    public bool gridActive {
+        get {
+            return _gridActive;
+        }
+        private set {
+            _gridActive = value;
+        }
     }
 
-    public void Start()
-    {
-        createNewStateList();
-        RefreshGrid();
+    public delegate void OnEnterGrid(int id);
+    public OnEnterGrid onEnterGrid;
+
+    public delegate void OnNewGrid(int id);
+    public OnNewGrid onNewGrid;
+
+    public delegate void OnExitGrid(int id);
+    public OnExitGrid onExitGrid;
+
+    // A bool to determine whether input should be received
+    public bool roundActive = false;
+    private float turnTimer = 0.0f;
+    private bool playerTurn = false;
+
+
+    // A list of all levels in the scene
+    public IDictionary<int, GameObject> levels = new Dictionary<int, GameObject>();
+
+    private int levelCount = 0;
+    public int currentLevel;
+    public level currentLevelObj {
+        get {
+            return levels[currentLevel].GetComponent<level>();
+        }
     }
 
     public void Update()
     {
-
-        if (roundActive)
-        {
-            turnTimer -= Time.deltaTime / settings.turnDuration;
-
-            if (turnTimer > 0.0f)
+        if (gridActive) {
+            if (roundActive)
             {
-                updateObjects();
-            } else {
-                endTurn();
+                turnTimer -= Time.deltaTime / settings.turnDuration;
+
+                if (turnTimer > 0.0f)
+                {
+                    updateObjects();
+                } else {
+                    endTurn();
+                }
+            } else
+            {
+                if (Input.GetKeyDown("z"))
+                {
+                    undo();
+                } else if (Input.GetKeyDown("r"))
+                {
+                    if (stateHistory.Count > 1) {
+                        reset();
+                    } else {
+                        exitGrid();
+                    }
+                }
             }
-        } else
-        {
-            if (Input.GetKeyDown("z"))
-            {
-                undo();
-            } else if (Input.GetKeyDown("r"))
-            {
-                reset();
+
+            bool playerWins = true;
+            foreach (GridObject gridObject in gridObjects) {
+                if (gridObject.state.exists) {
+                    playerWins = false;
+                }
+            }
+            if (playerWins) {
+                currentLevelObj.finished = true;
+                exitGrid();
             }
         }
+
+    }
+
+    public void enterGrid(int gridID, Vector3 position) 
+    {   
+        currentLevel = gridID;
+
+        // Clear any remaining data lists   
+        stateHistory = new List<IDictionary<GridObject, GridState>>();
+        grid = new GridManager();     
+        gridObjects = new List<GridObject>();
+
+        // Snap the players position
+        playerObject.gameObject.transform.position = position;
+
+        // Alert all listeners that the grid has been entered
+        onNewGrid(gridID);
+        onEnterGrid(gridID);
+        
+        // Now all tiles and grid objects should be registered, so just create some new lists
+        createNewStateList();
+        RefreshGrid();
+
+        // Update the state variables
+        gridActive = true;
+    }
+
+    public void exitGrid() {
+        gridActive = false;
+        onExitGrid(currentLevel);
     }
 
     // Begins a complete round of turns
     public void advanceTurn()
     {
         startRound();
+    }
+
+    public int getLevelID(GameObject obj) {
+        levelCount += 1;
+        levels.Add(levelCount, obj);
+        return levelCount;
     }
 
     private void startRound()
@@ -165,9 +239,6 @@ public class GameManager : Singleton<GameManager> {
                 if (SquareFilled(nextPosition) && GridContents(nextPosition) != gridObject)
                 {
                     GridObject fillObject = GridContents(nextPosition);
-                    print(fillObject.state.gridPosition);
-                    //print(fillObject.nextState.gridPosition);
-                    print(currentActions[fillObject]);
 
                     // Check if the object is moving
                     if (currentActions.Keys.Contains(fillObject))
@@ -222,8 +293,6 @@ public class GameManager : Singleton<GameManager> {
                             {
                                 if (otherObject.color == gridObject.color && otherObject.powerLevel == gridObject.powerLevel)
                                 {
-
-                                    print(otherObject.color + " " + gridObject.color);
                                     destroy = true;
                                     upgrade = true;
                                 }
@@ -338,6 +407,7 @@ public class GameManager : Singleton<GameManager> {
     {
         GameObject rook = Instantiate(settings.rookPrefab, GridTools.gridPositionToWorld(square), Quaternion.identity);
         rook.GetComponent<RookObject>().setColor(color);
+        rook.GetComponent<RookObject>().enterGrid(currentLevel);
     }
 
     #region GridObject commands
@@ -416,6 +486,7 @@ public class GameManager : Singleton<GameManager> {
 
         RefreshGrid();
 
+        stateHistory.Clear();
         createNewStateList();
     }
 
@@ -459,7 +530,7 @@ public class GameManager : Singleton<GameManager> {
     {
         // Empty the grid
         grid.emptyGrid();
-
+        
         // Fill the grid with each gridObject
         foreach (GridObject gridObject in gridObjects)
         {
@@ -468,7 +539,6 @@ public class GameManager : Singleton<GameManager> {
                 grid.updateTile(gridObject.state.gridPosition, true, gridObject);
             }
         }
-
         // Add the player to the grid
         grid.updateTile(playerObject.state.gridPosition, true, playerObject);
     }

@@ -20,4 +20,7 @@ public class GameSettings : ScriptableObject
     public Material blackMaterial;
     public Material whiteMaterial;
     public GameObject rookPrefab;
+
+    [Header("Levels")]
+    public List<GameObject> levels;
 }
